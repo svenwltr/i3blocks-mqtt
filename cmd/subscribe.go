@@ -74,15 +74,20 @@ func (r *SubscribeRunner) Run(ctx context.Context) error {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(r.broker)
 	opts.SetAutoReconnect(true)
+	opts.SetConnectRetry(true)
+
+	opts.OnConnect = func(client mqtt.Client) {
+		token := client.Subscribe(r.topic, 1, handler.Handle)
+		token.Wait()
+		if token.Error() != nil {
+			fmt.Println(token.Error())
+		}
+	}
+
+	opts.OnConnectionLost = handler.onConnectionLost
 
 	client := mqtt.NewClient(opts)
 	token := client.Connect()
-	token.Wait()
-	if token.Error() != nil {
-		return token.Error()
-	}
-
-	token = client.Subscribe(r.topic, 1, handler.Handle)
 	token.Wait()
 	if token.Error() != nil {
 		return token.Error()
@@ -160,4 +165,20 @@ func (h *SubscribeHandler) executeTemplate(t *template.Template, data any) (stri
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func (h *SubscribeHandler) onConnectionLost(mqtt.Client, error) {
+	fmt.Println("connection lost")
+}
+
+type Logger string
+
+func (l Logger) Println(v ...interface{}) {
+	fmt.Print(l, " ")
+	fmt.Println(v...)
+}
+
+func (l Logger) Printf(format string, v ...interface{}) {
+	fmt.Print(l, " ")
+	fmt.Printf(format, v...)
 }
